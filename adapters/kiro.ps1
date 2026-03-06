@@ -1,10 +1,16 @@
 # peon-ping adapter for Kiro CLI (Amazon) (Windows)
 # Translates Kiro hook events into peon.ps1 stdin JSON
 #
+# Kiro CLI has a hook system that pipes JSON to hooks via stdin,
+# nearly identical to Claude Code. This adapter remaps the few
+# differing event names and forwards to peon.sh.
+
 # preToolUse triggers a background stall detector that plays a
 # PermissionRequest sound if the kiro-cli DB doesn't update within
 # PEON_STALL_TIMEOUT seconds (default: 30).
-#
+# - This heuristically detects permission prompts without being noisy
+#   on auto-approved tools.
+
 # Setup: Create ~/.kiro/agents/peon-ping.json with:
 # {
 #   "name": "peon-ping",
@@ -24,6 +30,9 @@
 #     ]
 #   }
 # }
+
+# Tip: Desktop overlay notifications add ~10s latency to hooks.
+#      Recommend: peon notifications off
 
 $ErrorActionPreference = "SilentlyContinue"
 
@@ -61,6 +70,9 @@ $hookEvent = $inputJson.hook_event_name
 if (-not $hookEvent) { exit 0 }
 
 # --- Event remap ---
+# Note: session_id is kept raw (no prefix) so the stall detector can use it
+# for lockfiles and DB lookups. The "kiro-" prefix is added when forwarding
+# to peon.ps1, so peon can distinguish Kiro sessions from other IDEs.
 $remap = @{
     "agentSpawn"        = "SessionStart"
     "userPromptSubmit"  = "UserPromptSubmit"
@@ -82,26 +94,41 @@ if ($mapped -eq "_StallWatch") {
     # Spawn background stall watcher
     Start-Job -ScriptBlock {
         param($db, $cwd, $sid, $timeout, $peonDir)
-        $initial = & sqlite3 $db "SELECT MAX(updated_at) FROM conversations_v2 WHERE key='$cwd';" 2>$null
-        if (-not $initial) { return }
 
-        $elapsed = 0
-        while ($elapsed -lt $timeout) {
-            Start-Sleep -Seconds 2
-            $elapsed += 2
-            $current = & sqlite3 $db "SELECT MAX(updated_at) FROM conversations_v2 WHERE key='$cwd';" 2>$null
-            if ($current -ne $initial) { return }
+        # Lockfile — only one watcher per session
+        $lockfile = Join-Path $env:TEMP "kiro-stall-$sid.pid"
+        if (Test-Path $lockfile) {
+            $oldPid = Get-Content $lockfile -ErrorAction SilentlyContinue
+            if ($oldPid) { Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue }
         }
+        $PID | Set-Content $lockfile -Force
 
-        # Stalled — play permission sound
-        $payload = @{
-            hook_event_name = "PermissionRequest"
-            session_id      = "kiro-$sid"
-            cwd             = $cwd
-        } | ConvertTo-Json -Compress
+        try {
+            $initial = & sqlite3 $db "SELECT MAX(updated_at) FROM conversations_v2 WHERE key='$cwd';" 2>$null
+            if (-not $initial) { return }
 
-        $peonScript = Join-Path $peonDir "peon.ps1"
-        $payload | powershell -NoProfile -NonInteractive -File $peonScript 2>$null
+            $elapsed = 0
+            while ($elapsed -lt $timeout) {
+                Start-Sleep -Seconds 2
+                $elapsed += 2
+                $current = & sqlite3 $db "SELECT MAX(updated_at) FROM conversations_v2 WHERE key='$cwd';" 2>$null
+                if ($current -ne $initial) { return }
+            }
+
+            # Stalled — play permission sound
+            $payload = @{
+                hook_event_name = "PermissionRequest"
+                session_id      = "kiro-$sid"
+                cwd             = $cwd
+            } | ConvertTo-Json -Compress
+
+            $peonScript = Join-Path $peonDir "peon.ps1"
+            $payload | powershell -NoProfile -NonInteractive -File $peonScript 2>$null
+        } finally {
+            if ((Test-Path $lockfile) -and ((Get-Content $lockfile -ErrorAction SilentlyContinue) -eq $PID)) {
+                Remove-Item $lockfile -Force -ErrorAction SilentlyContinue
+            }
+        }
     } -ArgumentList $db, $cwd, $sid, $StallTimeout, $PeonDir | Out-Null
 
 } else {
