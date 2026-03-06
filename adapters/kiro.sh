@@ -8,8 +8,9 @@
 #
 # preToolUse triggers a background stall detector that plays a
 # PermissionRequest sound if the kiro-cli DB doesn't update within
-# PEON_STALL_TIMEOUT seconds (default: 30). This heuristically
-# detects permission prompts without being noisy on auto-approved tools.
+# PEON_STALL_TIMEOUT seconds (default: 30).
+# - This heuristically detects permission prompts without being noisy
+#   on auto-approved tools.
 #
 # Setup: Create ~/.kiro/agents/peon-ping.json with:
 #
@@ -90,6 +91,10 @@ stall_watch() {
 }
 
 # --- Read and remap event ---
+# Note: session_id is kept raw (no prefix) here so the stall detector can
+# use it for lockfiles and DB lookups. The "kiro-" prefix is added later
+# when forwarding to peon.sh, so peon can distinguish Kiro sessions from
+# other IDEs (Claude Code, Amp, etc).
 INPUT=$(cat)
 MAPPED_JSON=$(echo "$INPUT" | python3 -c "
 import sys, json, os
