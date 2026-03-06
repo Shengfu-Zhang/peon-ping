@@ -722,22 +722,29 @@ Add to `~/.codeium/windsurf/hooks.json` (user-level) or `.windsurf/hooks.json` (
 Create `~/.kiro/agents/peon-ping.json`:
 
 ```json
-{
-  "hooks": {
-    "agentSpawn": [
-      { "command": "bash ~/.claude/hooks/peon-ping/adapters/kiro.sh" }
-    ],
-    "userPromptSubmit": [
-      { "command": "bash ~/.claude/hooks/peon-ping/adapters/kiro.sh" }
-    ],
-    "stop": [
-      { "command": "bash ~/.claude/hooks/peon-ping/adapters/kiro.sh" }
-    ]
-  }
-}
+{                                                                                                                                                                                                       
+  "name": "peon-ping",                                                                                                                                                                                  
+  "description": "Audio notifications via peon-ping hooks.",                                                                                                                                            
+  "hooks": {                                                                                                                                                                                            
+    "agentSpawn": [                                                                                                                                                                                     
+      { "command": "bash ~/.claude/hooks/peon-ping/adapters/kiro.sh" }                                                                                                                                  
+    ],                                                                                                                                                                                                  
+    "userPromptSubmit": [                                                                                                                                                                               
+      { "command": "bash ~/.claude/hooks/peon-ping/adapters/kiro.sh" }                                                                                                                                  
+    ],                                                                                                                                                                                                  
+    "stop": [                                                                                                                                                                                           
+      { "command": "bash ~/.claude/hooks/peon-ping/adapters/kiro.sh" }                                                                                                                                  
+    ],                                                                                                                                                                                                  
+    "preToolUse": [                                                                                                                                                                                     
+      { "command": "bash ~/.claude/hooks/peon-ping/adapters/kiro.sh" }                                                                                                                                  
+    ]                                                                                                                                                                                                   
+  }                                                                                                                                                                                                     
+} 
 ```
+                                                               
+`preToolUse` triggers a background stall detector — if the kiro-cli DB doesn't update within 30s (configurable via `PEON_STALL_TIMEOUT`), a `PermissionRequest` sound plays. Auto-approved tools exit silently. `postToolUse` is intentionally excluded.
 
-`preToolUse`/`postToolUse` are intentionally excluded — they fire on every tool call and would be extremely noisy.
+> **Tip:** Desktop overlay notifications add ~10s latency to Kiro hooks. Recommend `peon notifications off` (sounds-only is instant).    
 
 ### Kimi Code setup
 
