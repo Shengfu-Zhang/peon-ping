@@ -56,10 +56,11 @@ run_kiro() {
 # Skipped events
 # ============================================================
 
-@test "preToolUse is skipped (too noisy)" {
-  run_kiro '{"hook_event_name":"preToolUse","cwd":"/tmp/myproject","session_id":"k1","tool_name":"execute_bash"}'
-  [ "$KIRO_EXIT" -eq 0 ]
-  ! afplay_was_called
+@test "preToolUse spawns stall watcher (no immediate sound)" {
+  run_kiro '{"hook_event_name":"preToolUse","cwd":"/tmp/myproject","session_id":"k1","tool_name":"execute_bash"}'                                     
+  [ "$KIRO_EXIT" -eq 0 ]                                                                                                                              
+  # Stall watcher runs in background — no immediate sound (needs 30s + real DB)                                                                       
+  ! afplay_was_called                                                                                                                                 
 }
 
 @test "postToolUse is skipped (too noisy)" {
